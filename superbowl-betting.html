@@ -404,8 +404,8 @@
         // Fetch data from Google Sheets
         async function fetchSheetData() {
             try {
-                // Use the CSV export instead of the gviz API to avoid CORS issues
-                const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=0`;
+                // Use the published CSV URL
+                const url = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTlM_j6A0tYKmexDB-eCJ1LiiodtzbRkw3FMnxuXE5CgKUdJXQRZca1C4zWO54IL6Ltq16Me_8h5fU-/pub?output=csv`;
                 console.log('Fetching from:', url);
                 
                 const response = await fetch(url);
