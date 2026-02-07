@@ -405,12 +405,29 @@
         async function fetchSheetData() {
             try {
                 const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json`;
+                console.log('Fetching from:', url);
+                
                 const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const text = await response.text();
+                console.log('Response received, length:', text.length);
                 
                 // Parse Google Sheets JSON response
-                const json = JSON.parse(text.substr(47).slice(0, -2));
+                const jsonText = text.match(/google\.visualization\.Query\.setResponse\((.*)\);/)[1];
+                const json = JSON.parse(jsonText);
+                
+                console.log('Parsed JSON:', json);
+                
+                if (!json.table || !json.table.rows) {
+                    console.warn('No table data found');
+                    return { participants: [], questions: [] };
+                }
+                
                 const rows = json.table.rows;
+                console.log('Rows found:', rows.length);
                 
                 if (rows.length === 0) {
                     return { participants: [], questions: [] };
@@ -418,40 +435,49 @@
 
                 // Extract headers (questions) from first row
                 const headers = rows[0].c.map(cell => cell ? cell.v : '');
+                console.log('Headers:', headers);
                 
                 // Questions start from column 4 (index 3) - skipping Timestamp, Score, Payment, Name
-                const questionColumns = headers.slice(4);
+                const questionColumns = headers.slice(4).filter(h => h); // Filter out empty headers
                 questions = questionColumns.map((q, index) => ({
                     id: index,
                     text: q,
                     column: index + 4
                 }));
+                
+                console.log('Questions parsed:', questions.length);
 
                 // Extract participant data
                 participants = [];
                 for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i].c;
-                    if (!row || !row[3] || !row[3].v) continue; // Skip if no name
+                    const row = rows[i];
+                    if (!row || !row.c) continue;
+                    
+                    const cells = row.c;
+                    if (!cells[3] || !cells[3].v) continue; // Skip if no name
                     
                     const participant = {
-                        name: row[3].v,
+                        name: cells[3].v,
                         answers: {},
                         score: 0
                     };
 
                     // Get answers for each question
                     questions.forEach(q => {
-                        const cell = row[q.column];
-                        participant.answers[q.id] = cell ? cell.v : '';
+                        const cell = cells[q.column];
+                        participant.answers[q.id] = cell && cell.v ? cell.v : '';
                     });
 
                     participants.push(participant);
                 }
+                
+                console.log('Participants parsed:', participants.length);
 
                 return { participants, questions };
             } catch (error) {
                 console.error('Error fetching sheet data:', error);
-                throw error;
+                console.error('Error details:', error.message, error.stack);
+                return { participants: [], questions: [] };
             }
         }
 
@@ -619,12 +645,44 @@
         // Check admin password
         async function checkPassword() {
             const input = document.getElementById('admin-password');
-            if (input.value === CONFIG.ADMIN_PASSWORD) {
+            const password = input ? input.value : '';
+            
+            console.log('Checking password...');
+            
+            if (password === CONFIG.ADMIN_PASSWORD) {
+                console.log('Password correct, loading data...');
                 isAdmin = true;
-                await loadData();
-                render();
+                
+                // Show loading message
+                document.getElementById('app').innerHTML = '<div class="loading">Loading admin panel...</div>';
+                
+                try {
+                    await loadData();
+                    console.log('Data loaded, rendering...');
+                    render();
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    document.getElementById('app').innerHTML = `
+                        <div class="error-message">
+                            Error loading data: ${error.message}
+                            <br><br>
+                            <button onclick="location.reload()">Retry</button>
+                        </div>
+                    `;
+                }
             } else {
-                alert('Incorrect password');
+                console.log('Password incorrect');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = 'Incorrect password';
+                errorDiv.style.marginTop = '10px';
+                
+                const form = document.querySelector('.login-form');
+                const existingError = form.querySelector('.error-message');
+                if (existingError) {
+                    existingError.remove();
+                }
+                form.insertBefore(errorDiv, form.querySelector('button'));
             }
         }
 
@@ -652,12 +710,19 @@
         // Load all data
         async function loadData() {
             try {
+                console.log('Loading data...');
                 const data = await fetchSheetData();
                 participants = data.participants;
                 questions = data.questions;
                 correctAnswers = await getCorrectAnswers();
+                console.log('Data loaded successfully:', {
+                    participants: participants.length,
+                    questions: questions.length,
+                    correctAnswers: Object.keys(correctAnswers).length
+                });
             } catch (error) {
                 console.error('Error loading data:', error);
+                throw error;
             }
         }
 
@@ -665,37 +730,71 @@
         function render() {
             const app = document.getElementById('app');
             
-            if (participants.length === 0 && questions.length === 0) {
-                app.innerHTML = '<div class="loading">Loading data...</div>';
-                return;
-            }
-
-            if (currentView === 'admin') {
-                app.innerHTML = renderAdminPanel();
-            } else {
-                app.innerHTML = renderScoreboard();
+            try {
+                console.log('Rendering view:', currentView);
+                console.log('Data state:', { 
+                    participants: participants.length, 
+                    questions: questions.length 
+                });
+                
+                if (currentView === 'admin') {
+                    app.innerHTML = renderAdminPanel();
+                } else {
+                    app.innerHTML = renderScoreboard();
+                }
+            } catch (error) {
+                console.error('Render error:', error);
+                app.innerHTML = `
+                    <div class="error-message">
+                        Error rendering page: ${error.message}
+                        <br><br>
+                        <button onclick="location.reload()">Reload Page</button>
+                    </div>
+                `;
             }
         }
 
         // Initialize app
         async function init() {
-            // Check URL for admin mode
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('admin') === 'true') {
-                document.getElementById('app').innerHTML = renderLogin();
-                return;
-            }
-
-            await loadData();
-            render();
-
-            // Auto-refresh every 30 seconds
-            setInterval(async () => {
-                if (currentView === 'scoreboard') {
-                    await loadData();
-                    render();
+            try {
+                console.log('Initializing app...');
+                
+                // Check URL for admin mode
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('admin') === 'true') {
+                    console.log('Admin mode detected');
+                    document.getElementById('app').innerHTML = renderLogin();
+                    return;
                 }
-            }, CONFIG.REFRESH_INTERVAL);
+
+                console.log('Loading initial data...');
+                await loadData();
+                console.log('Initial data loaded, rendering...');
+                render();
+
+                // Auto-refresh every 30 seconds
+                setInterval(async () => {
+                    if (currentView === 'scoreboard') {
+                        console.log('Auto-refreshing data...');
+                        await loadData();
+                        render();
+                    }
+                }, CONFIG.REFRESH_INTERVAL);
+                
+                console.log('App initialized successfully');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                document.getElementById('app').innerHTML = `
+                    <div class="container">
+                        <div class="error-message">
+                            <h2>Error Loading App</h2>
+                            <p>${error.message}</p>
+                            <p>Please check the browser console for details.</p>
+                            <button onclick="location.reload()">Retry</button>
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         // Start the app
