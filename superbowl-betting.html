@@ -404,7 +404,8 @@
         // Fetch data from Google Sheets
         async function fetchSheetData() {
             try {
-                const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json`;
+                // Use the CSV export instead of the gviz API to avoid CORS issues
+                const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=0`;
                 console.log('Fetching from:', url);
                 
                 const response = await fetch(url);
@@ -412,33 +413,43 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                const text = await response.text();
-                console.log('Response received, length:', text.length);
+                const csvText = await response.text();
+                console.log('CSV response received, length:', csvText.length);
                 
-                // Parse Google Sheets JSON response
-                const jsonText = text.match(/google\.visualization\.Query\.setResponse\((.*)\);/)[1];
-                const json = JSON.parse(jsonText);
+                // Parse CSV
+                const rows = csvText.split('\n').map(row => {
+                    // Simple CSV parsing - handle quoted fields
+                    const cells = [];
+                    let current = '';
+                    let inQuotes = false;
+                    
+                    for (let i = 0; i < row.length; i++) {
+                        const char = row[i];
+                        if (char === '"') {
+                            inQuotes = !inQuotes;
+                        } else if (char === ',' && !inQuotes) {
+                            cells.push(current.trim());
+                            current = '';
+                        } else {
+                            current += char;
+                        }
+                    }
+                    cells.push(current.trim());
+                    return cells;
+                });
                 
-                console.log('Parsed JSON:', json);
-                
-                if (!json.table || !json.table.rows) {
-                    console.warn('No table data found');
-                    return { participants: [], questions: [] };
-                }
-                
-                const rows = json.table.rows;
-                console.log('Rows found:', rows.length);
+                console.log('CSV rows parsed:', rows.length);
                 
                 if (rows.length === 0) {
                     return { participants: [], questions: [] };
                 }
 
                 // Extract headers (questions) from first row
-                const headers = rows[0].c.map(cell => cell ? cell.v : '');
+                const headers = rows[0];
                 console.log('Headers:', headers);
                 
                 // Questions start from column 4 (index 3) - skipping Timestamp, Score, Payment, Name
-                const questionColumns = headers.slice(4).filter(h => h); // Filter out empty headers
+                const questionColumns = headers.slice(4).filter(h => h);
                 questions = questionColumns.map((q, index) => ({
                     id: index,
                     text: q,
@@ -451,21 +462,17 @@
                 participants = [];
                 for (let i = 1; i < rows.length; i++) {
                     const row = rows[i];
-                    if (!row || !row.c) continue;
-                    
-                    const cells = row.c;
-                    if (!cells[3] || !cells[3].v) continue; // Skip if no name
+                    if (!row || row.length < 4 || !row[3]) continue; // Skip if no name
                     
                     const participant = {
-                        name: cells[3].v,
+                        name: row[3],
                         answers: {},
                         score: 0
                     };
 
                     // Get answers for each question
                     questions.forEach(q => {
-                        const cell = cells[q.column];
-                        participant.answers[q.id] = cell && cell.v ? cell.v : '';
+                        participant.answers[q.id] = row[q.column] || '';
                     });
 
                     participants.push(participant);
