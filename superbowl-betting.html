@@ -211,6 +211,7 @@
             border-radius: 15px;
             padding: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
         }
 
         .admin-panel h2 {
@@ -235,7 +236,6 @@
             color: #002244;
         }
 
-        .admin-question input,
         .admin-question select {
             width: 100%;
             padding: 10px;
@@ -244,10 +244,44 @@
             font-size: 1em;
         }
 
-        .admin-question input:focus,
         .admin-question select:focus {
             outline: none;
             border-color: #69BE28;
+        }
+
+        .manual-adjustments {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+
+        .manual-adjustments h2 {
+            color: #002244;
+            margin-bottom: 20px;
+            font-size: 2em;
+            border-bottom: 3px solid #69BE28;
+            padding-bottom: 10px;
+        }
+
+        .adjustment-row {
+            display: grid;
+            grid-template-columns: 1fr 150px 150px;
+            gap: 15px;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .adjustment-row input {
+            padding: 10px;
+            border: 2px solid #dee2e6;
+            border-radius: 5px;
+            font-size: 1em;
+            text-align: center;
         }
 
         button {
@@ -342,7 +376,6 @@
     <script>
         // Configuration
         const CONFIG = {
-            SHEET_ID: '1Y7aOaQ3Y4-zKIiBrbIud8f1xcZp80A5toRmpc7Yg5Yc',
             ADMIN_PASSWORD: 'GoHawks26',
             REFRESH_INTERVAL: 30000, // 30 seconds
             FIREBASE_CONFIG: {
@@ -356,6 +389,32 @@
             }
         };
 
+        // Question definitions with options for dropdowns
+        const QUESTIONS = [
+            { id: 0, text: "Which team will win the coin toss?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 1, text: "Which Bay Area landmark will be shown first after the opening kickoff?", options: ["Golden Gate Bridge", "Alcatraz Island"] },
+            { id: 2, text: "Which team will commit the first penalty?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 3, text: "Which team will score the first field goal?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 4, text: "Which team will score the first touchdown?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 5, text: "Which team will score the first sack (defense)?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 6, text: "Which team will have the first turnover (lose the ball)?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 7, text: "Will the first coach's challenge be successful?", options: ["Yes", "No"] },
+            { id: 8, text: "Will either team score in the first 6:30 minutes of the game?", options: ["Yes", "No"] },
+            { id: 9, text: "Will there be a fake field goal/punt?", options: ["Yes", "No"] },
+            { id: 10, text: 'Will there be a "doinked" field goal, successful or not?', options: ["Yes", "No"] },
+            { id: 11, text: "Will a two-point attempt occur during the game?", options: ["Yes", "No"] },
+            { id: 12, text: "Which will happen first, a touchdown or a sack?", options: ["Touchdown", "Sack"] },
+            { id: 13, text: "Will more than 2.5 players attempt a pass?", options: ["Yes", "No"] },
+            { id: 14, text: "Will any player score an octopus?", options: ["Yes", "No"] },
+            { id: 15, text: "Will the game be over/under 45.5 points?", options: ["Over", "Under"] },
+            { id: 16, text: "Will an offensive linemen score a TD?", options: ["Yes", "No"] },
+            { id: 17, text: "Will an unauthorized person (streaker) enter the field of play?", options: ["Yes", "No"] },
+            { id: 22, text: "Which team will have more rushing yards at the end of the game?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 23, text: "Which team will have more passing yards at the end of the game?", options: ["Seattle Seahawks", "New England Patriots"] },
+            { id: 24, text: "What color will the Gatorade shower be?", options: ["Clear/Water", "Lime/Green", "Yellow", "Orange", "Red", "Blue", "Purple"] },
+            { id: 25, text: "Who will win Super Bowl 60?", options: ["Seattle Seahawks", "New England Patriots"] }
+        ];
+
         // Initialize Firebase
         let db = null;
         try {
@@ -367,13 +426,13 @@
         }
 
         // State
-        let currentView = 'scoreboard'; // 'scoreboard' or 'admin'
+        let currentView = 'scoreboard';
         let participants = [];
         let correctAnswers = {};
-        let questions = [];
+        let manualAdjustments = {};
         let isAdmin = false;
 
-        // Get correct answers from Firebase or localStorage
+        // Get data from Firebase or localStorage
         async function getCorrectAnswers() {
             if (db) {
                 try {
@@ -387,7 +446,20 @@
             return JSON.parse(localStorage.getItem('correctAnswers') || '{}');
         }
 
-        // Save correct answers to Firebase and localStorage
+        async function getManualAdjustments() {
+            if (db) {
+                try {
+                    const snapshot = await db.ref('manualAdjustments').once('value');
+                    return snapshot.val() || {};
+                } catch (error) {
+                    console.error('Firebase read error:', error);
+                    return JSON.parse(localStorage.getItem('manualAdjustments') || '{}');
+                }
+            }
+            return JSON.parse(localStorage.getItem('manualAdjustments') || '{}');
+        }
+
+        // Save data to Firebase and localStorage
         async function saveCorrectAnswers(answers) {
             correctAnswers = answers;
             localStorage.setItem('correctAnswers', JSON.stringify(answers));
@@ -401,10 +473,22 @@
             }
         }
 
+        async function saveManualAdjustments(adjustments) {
+            manualAdjustments = adjustments;
+            localStorage.setItem('manualAdjustments', JSON.stringify(adjustments));
+            
+            if (db) {
+                try {
+                    await db.ref('manualAdjustments').set(adjustments);
+                } catch (error) {
+                    console.error('Firebase write error:', error);
+                }
+            }
+        }
+
         // Fetch data from Google Sheets
         async function fetchSheetData() {
             try {
-                // Use the published CSV URL
                 const url = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTlM_j6A0tYKmexDB-eCJ1LiiodtzbRkw3FMnxuXE5CgKUdJXQRZca1C4zWO54IL6Ltq16Me_8h5fU-/pub?output=csv`;
                 console.log('Fetching from:', url);
                 
@@ -418,7 +502,6 @@
                 
                 // Parse CSV
                 const rows = csvText.split('\n').map(row => {
-                    // Simple CSV parsing - handle quoted fields
                     const cells = [];
                     let current = '';
                     let inQuotes = false;
@@ -441,22 +524,8 @@
                 console.log('CSV rows parsed:', rows.length);
                 
                 if (rows.length === 0) {
-                    return { participants: [], questions: [] };
+                    return { participants: [] };
                 }
-
-                // Extract headers (questions) from first row
-                const headers = rows[0];
-                console.log('Headers:', headers);
-                
-                // Questions start from column 4 (index 3) - skipping Timestamp, Score, Payment, Name
-                const questionColumns = headers.slice(4).filter(h => h);
-                questions = questionColumns.map((q, index) => ({
-                    id: index,
-                    text: q,
-                    column: index + 4
-                }));
-                
-                console.log('Questions parsed:', questions.length);
 
                 // Extract participant data
                 participants = [];
@@ -470,9 +539,10 @@
                         score: 0
                     };
 
-                    // Get answers for each question
-                    questions.forEach(q => {
-                        participant.answers[q.id] = row[q.column] || '';
+                    // Map answers to question IDs (columns 4-29)
+                    QUESTIONS.forEach(q => {
+                        const columnIndex = q.id + 4;
+                        participant.answers[q.id] = row[columnIndex] || '';
                     });
 
                     participants.push(participant);
@@ -480,27 +550,29 @@
                 
                 console.log('Participants parsed:', participants.length);
 
-                return { participants, questions };
+                return { participants };
             } catch (error) {
                 console.error('Error fetching sheet data:', error);
-                console.error('Error details:', error.message, error.stack);
-                return { participants: [], questions: [] };
+                return { participants: [] };
             }
         }
 
-        // Calculate scores
+        // Calculate scores with case-insensitive matching
         function calculateScores() {
             participants.forEach(p => {
                 let score = 0;
-                questions.forEach(q => {
-                    const userAnswer = p.answers[q.id];
-                    const correctAnswer = correctAnswers[q.id];
+                QUESTIONS.forEach(q => {
+                    const userAnswer = (p.answers[q.id] || '').toLowerCase().trim();
+                    const correctAnswer = (correctAnswers[q.id] || '').toLowerCase().trim();
                     
                     if (correctAnswer && userAnswer === correctAnswer) {
                         score++;
                     }
                 });
-                p.score = score;
+                
+                // Add manual adjustment
+                const adjustment = parseInt(manualAdjustments[p.name] || 0);
+                p.score = score + adjustment;
             });
 
             // Sort by score descending
@@ -549,7 +621,7 @@
                 </div>
             `).join('');
 
-            const questionsHTML = questions.map(q => {
+            const questionsHTML = QUESTIONS.map(q => {
                 const hasAnswer = correctAnswers[q.id];
                 return `
                     <div class="question-card ${hasAnswer ? 'answered' : ''}">
@@ -584,8 +656,8 @@
                     </div>
 
                     <div class="questions-section">
-                        <h2>📋 Questions & Answers</h2>
-                        ${questions.length > 0 ? questionsHTML : '<div class="no-data">Loading questions...</div>'}
+                        <h2>📋 Scoring Questions & Answers</h2>
+                        ${questionsHTML}
                     </div>
 
                     <div class="last-updated">
@@ -598,14 +670,27 @@
 
         // Render admin panel
         function renderAdminPanel() {
-            const questionsHTML = questions.map(q => `
+            const questionsHTML = QUESTIONS.map(q => `
                 <div class="admin-question">
                     <label>${q.text}</label>
+                    <select id="answer-${q.id}">
+                        <option value="">-- Select Answer --</option>
+                        ${q.options.map(opt => `
+                            <option value="${opt}" ${correctAnswers[q.id] === opt ? 'selected' : ''}>${opt}</option>
+                        `).join('')}
+                    </select>
+                </div>
+            `).join('');
+
+            const adjustmentsHTML = participants.map(p => `
+                <div class="adjustment-row">
+                    <div class="player-name">${p.name}</div>
+                    <div>Auto Score: ${p.score - (parseInt(manualAdjustments[p.name] || 0))}</div>
                     <input 
-                        type="text" 
-                        id="answer-${q.id}"
-                        value="${correctAnswers[q.id] || ''}"
-                        placeholder="Enter correct answer"
+                        type="number" 
+                        id="adjust-${p.name}"
+                        value="${manualAdjustments[p.name] || 0}"
+                        placeholder="+/- points"
                     />
                 </div>
             `).join('');
@@ -614,7 +699,7 @@
                 <div class="container">
                     <header>
                         <h1>🏈 Super Bowl LX Admin Panel 🏈</h1>
-                        <div class="subtitle">Set Correct Answers</div>
+                        <div class="subtitle">Set Correct Answers & Adjust Scores</div>
                     </header>
 
                     <div class="view-toggle">
@@ -628,6 +713,17 @@
                         <button onclick="saveAnswers()" style="margin-top: 20px; width: 100%;">
                             💾 Save Answers
                         </button>
+                    </div>
+
+                    <div class="manual-adjustments">
+                        <h2>🔧 Manual Score Adjustments</h2>
+                        <p style="margin-bottom: 20px; color: #666;">Use this to add/subtract points for challenges or tie-breaker scoring</p>
+                        ${adjustmentsHTML || '<div class="no-data">No participants yet</div>'}
+                        ${participants.length > 0 ? `
+                            <button onclick="saveAdjustments()" style="margin-top: 20px; width: 100%;">
+                                💾 Save Adjustments
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -660,7 +756,6 @@
                 console.log('Password correct, loading data...');
                 isAdmin = true;
                 
-                // Show loading message
                 document.getElementById('app').innerHTML = '<div class="loading">Loading admin panel...</div>';
                 
                 try {
@@ -696,15 +791,29 @@
         // Save answers from admin panel
         async function saveAnswers() {
             const newAnswers = {};
-            questions.forEach(q => {
-                const input = document.getElementById(`answer-${q.id}`);
-                if (input && input.value.trim()) {
-                    newAnswers[q.id] = input.value.trim();
+            QUESTIONS.forEach(q => {
+                const select = document.getElementById(`answer-${q.id}`);
+                if (select && select.value) {
+                    newAnswers[q.id] = select.value;
                 }
             });
             
             await saveCorrectAnswers(newAnswers);
             alert('Answers saved!');
+        }
+
+        // Save manual adjustments
+        async function saveAdjustments() {
+            const newAdjustments = {};
+            participants.forEach(p => {
+                const input = document.getElementById(`adjust-${p.name}`);
+                if (input) {
+                    newAdjustments[p.name] = parseInt(input.value) || 0;
+                }
+            });
+            
+            await saveManualAdjustments(newAdjustments);
+            alert('Adjustments saved!');
             switchView('scoreboard');
         }
 
@@ -720,12 +829,12 @@
                 console.log('Loading data...');
                 const data = await fetchSheetData();
                 participants = data.participants;
-                questions = data.questions;
                 correctAnswers = await getCorrectAnswers();
+                manualAdjustments = await getManualAdjustments();
                 console.log('Data loaded successfully:', {
                     participants: participants.length,
-                    questions: questions.length,
-                    correctAnswers: Object.keys(correctAnswers).length
+                    correctAnswers: Object.keys(correctAnswers).length,
+                    adjustments: Object.keys(manualAdjustments).length
                 });
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -739,10 +848,6 @@
             
             try {
                 console.log('Rendering view:', currentView);
-                console.log('Data state:', { 
-                    participants: participants.length, 
-                    questions: questions.length 
-                });
                 
                 if (currentView === 'admin') {
                     app.innerHTML = renderAdminPanel();
