@@ -31,6 +31,46 @@
             padding: 20px;
             background: rgba(0, 0, 0, 0.3);
             border-radius: 15px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+        }
+
+        .header-content {
+            flex: 1;
+            max-width: 700px;
+        }
+
+        .erik-photo {
+            width: 160px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(105, 190, 40, 0.5);
+            border: 3px solid #69BE28;
+            transition: transform 0.3s ease;
+        }
+
+        .erik-photo:hover {
+            transform: scale(1.05) rotate(2deg);
+        }
+
+        @media (max-width: 900px) {
+            .erik-photo {
+                width: 120px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .erik-photo {
+                width: 100px;
+            }
         }
 
         h1 {
@@ -42,6 +82,13 @@
         .subtitle {
             font-size: 1.2em;
             opacity: 0.9;
+        }
+
+        .subtitle .divider {
+            color: #69BE28;
+            font-weight: bold;
+            padding: 0 8px;
+            font-size: 1.1em;
         }
 
         /* Leaderboard */
@@ -635,7 +682,7 @@
                 <div class="container">
                     <header>
                         <h1>🏈 Super Bowl LX Prop Bet 2026 🏈</h1>
-                        <div class="subtitle">Live Scoreboard  |  Happy Birthday, Erik!  |  Go Hawks!</div>
+                        <div class="subtitle">Live Scoreboard</div>
                     </header>
 
                     ${isAdmin ? `
@@ -698,8 +745,10 @@
             return `
                 <div class="container">
                     <header>
-                        <h1>🏈 Super Bowl LX Admin Panel 🏈</h1>
-                        <div class="subtitle">Set Correct Answers & Adjust Scores</div>
+                        <div class="header-content">
+                            <h1>🏈 Super Bowl LX Admin Panel 🏈</h1>
+                            <div class="subtitle">Set Correct Answers & Adjust Scores</div>
+                        </div>
                     </header>
 
                     <div class="view-toggle">
